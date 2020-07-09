@@ -1,0 +1,20 @@
+# Build output
+bin/
+
+# LaTeX
+*.log
+*.synctex.gz
+*.aux
+*.toc
+*.out
+
+# IDEs
+.idea/
+.vscode/
+*.sublime-workspace
+*.sublime-project
+
+# System
+Thumbs.db
+desktop.ini
+.DS_Store
