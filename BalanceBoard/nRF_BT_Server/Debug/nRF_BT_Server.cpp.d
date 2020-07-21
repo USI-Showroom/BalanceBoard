@@ -1,0 +1,20 @@
+C:\Users\user\AppData\Local\Temp\VMBuilds\nRF_BT_Server\pro_8MHzatmega328\Debug\nRF_BT_Server.cpp.o: \
+ C:\Users\user\AppData\Local\Temp\VMBuilds\nRF_BT_Server\pro_8MHzatmega328\Debug\nRF_BT_Server.cpp \
+ D:\Documents\PortableApps\arduino-1.8.3\hardware\arduino\avr\cores\arduino/Arduino.h \
+ D:\Documents\PortableApps\arduino-1.8.3\hardware\arduino\avr\cores\arduino/binary.h \
+ D:\Documents\PortableApps\arduino-1.8.3\hardware\arduino\avr\cores\arduino/WCharacter.h \
+ D:\Documents\PortableApps\arduino-1.8.3\hardware\arduino\avr\cores\arduino/WString.h \
+ D:\Documents\PortableApps\arduino-1.8.3\hardware\arduino\avr\cores\arduino/HardwareSerial.h \
+ D:\Documents\PortableApps\arduino-1.8.3\hardware\arduino\avr\cores\arduino/Stream.h \
+ D:\Documents\PortableApps\arduino-1.8.3\hardware\arduino\avr\cores\arduino/Print.h \
+ D:\Documents\PortableApps\arduino-1.8.3\hardware\arduino\avr\cores\arduino/Printable.h \
+ D:\Documents\PortableApps\arduino-1.8.3\hardware\arduino\avr\cores\arduino/USBAPI.h \
+ D:\Documents\PortableApps\arduino-1.8.3\hardware\arduino\avr\cores\arduino/Arduino.h \
+ D:\Documents\PortableApps\arduino-1.8.3\hardware\arduino\avr\variants\eightanaloginputs/pins_arduino.h \
+ D:\Documents\PortableApps\arduino-1.8.3\hardware\arduino\avr\variants\eightanaloginputs/../standard/pins_arduino.h \
+ D:\Documents\PortableApps\arduino-1.8.3\hardware\arduino\avr\libraries\SoftwareSerial\src/SoftwareSerial.h \
+ D:\Documents\PortableApps\arduino-1.8.3\hardware\arduino\avr\cores\arduino/Stream.h \
+ D:\Documents\PortableApps\arduino-1.8.3\libraries\RF24/RF24.h \
+ D:\Documents\PortableApps\arduino-1.8.3\libraries\RF24/RF24_config.h \
+ D:\Documents\PortableApps\arduino-1.8.3\hardware\arduino\avr\libraries\SPI\src/SPI.h \
+ D:\Documents\PortableApps\arduino-1.8.3\libraries\RF24/printf.h

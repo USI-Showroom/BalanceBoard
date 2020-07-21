@@ -1,0 +1,510 @@
+//#include <HID.h>
+
+// ORIGINAL CODE MODIFIED FROM:
+//  I2C device class (I2Cdev) demonstration Arduino sketch for MPU6050 class using DMP (MotionApps v2.0)
+
+// I2Cdev and MPU6050 must be installed as libraries, or else the .cpp/.h files
+//   for both classes must be in the include path of your project
+
+/* Change the settings here to turn on(1)/off(0) the use of the following:
+    - USE_NRF24L01_COMM :   nRF24L01+ communication (includes the RF24 library).
+    - USE_SERIAL_BT_COMM :  Bluetooth communication (includes SoftwareSerial library).
+    - USE_LED_PIXEL_STRIP : LED strip on the board  (includes Adafruit_NeoPixel library).
+   The choice of which features to enable will affect the code size. Probably, enabling
+     all features will exceed the available ROM space on the pro-mini board.
+   
+   TODO: refine to code to fit all necessary features
+*/
+#define USE_NRF24L01_COMM 0
+#define USE_SERIAL_BT_COMM 0
+#define USE_LED_PIXEL_STRIP 1
+
+
+// MPU6050 setup goes here
+// The values in MPU6050_OFFSETS should be re-generated for each board.
+// Please run the 'MPU6050_calibration.ino' code to generate these values
+#include "I2Cdev.h"
+#include "MPU6050_6Axis_MotionApps20.h"
+MPU6050 mpu;
+const int32_t MPU6050_OFFSETS[] = {45, -2146, 1323,  110, -17, -7}; // generate using the calibration code
+
+
+// nRF24L01+ setup goes here
+#if USE_NRF24L01_COMM
+  #include "RF24.h"
+  #define NRF24_PIN_CE          9
+  #define NRF24_PIN_CSN         10
+  RF24 radio(NRF24_PIN_CE, NRF24_PIN_CSN);
+  const uint64_t pipe = 0xF0F0F0F0A2UL;
+#endif
+
+//bluetooth HC-05 setup goes here
+#if USE_SERIAL_BT_COMM
+  #include "SoftwareSerial.h"
+  #define SW_SERIAL_RX          4
+  #define SW_SERIAL_TX          5
+  SoftwareSerial mySerial(SW_SERIAL_RX, SW_SERIAL_TX); // (RX, TX)
+#endif
+
+#if USE_LED_PIXEL_STRIP
+  // led strip setup goes here
+  #include "Adafruit_NeoPixel.h"
+  #define LED_STRIP_PIN         6
+  #define STRIPCOUNT            74
+#endif
+
+ 
+#define OUTPUT_READABLE_YAWPITCHROLL
+
+#define MAX_MSG_LEN 100
+
+// MPU control/status vars
+bool dmpReady = false;  // set true if DMP init was successful
+uint8_t mpuIntStatus;   // holds actual interrupt status byte from MPU
+uint8_t devStatus;      // return status after each device operation (0 = success, !0 = error)
+uint16_t packetSize;    // expected DMP pafwcket size (default is 42 bytes)
+uint16_t fifoCount;     // count of all bytes currently in FIFO
+uint8_t fifoBuffer[64]; // FIFO storage buffer
+
+// orientation/motion vars
+Quaternion quater;      // [w, x, y, z]         quaternion container
+VectorFloat gravity;    // [x, y, z]            gravity vector
+float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
+int numberOfCircles;
+int radiusOfCentralCircle;  
+
+
+
+unsigned long startTimer;
+char state;
+float secondsToGo;
+float timerAfterFirstCalibration;
+float timerCalibration;
+float timerDown;
+float timerAttempt;
+float timerEnd;
+float score;
+float sample;
+float best;
+float last;
+float mx;
+float my;
+float mxnew;
+float mynew;
+float calX = 0;
+float calY = 0;
+float calSample = 1;
+int incomingByte;
+String inputString = "";
+int sendSerial = 0;
+int sendSerialCount = 1;
+char tmpMsg[MAX_MSG_LEN];
+
+
+
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(STRIPCOUNT, LED_STRIP_PIN, NEO_GRB + NEO_KHZ800);
+
+void clearStrip(){
+  for (int i=0; i<STRIPCOUNT; i++){
+    strip.setPixelColor(i, 0);
+  }
+  strip.show();
+}
+
+void countingStrip(int currTimer, int rRGB, int gRGB, int bRGB)
+{
+  int ledOff, ledOn, ledCurr, _i, _j;
+  ledCurr = 0;
+  strip.setPixelColor(0, rRGB, gRGB, bRGB);
+  ledOff = round(((STRIPCOUNT-1)/currTimer) * (2.0/3.0)) ;
+  ledOn = ceil(((STRIPCOUNT-1)/currTimer) * (1.0/3.0)) ;
+  if (ledOn < 1) ledOn = 1;
+  for (_i=0; _i <= secondsToGo-1; _i++)
+  {
+    for (_j=0; _j < ledOff; _j++)
+      strip.setPixelColor(++ledCurr, 0x00, 0x00, 0x00);
+    for (_j=0; _j < ledOn; _j++)
+      strip.setPixelColor(++ledCurr, rRGB, gRGB, bRGB);
+  }
+  for (_i=ledCurr+1; _i < STRIPCOUNT; _i++)
+    strip.setPixelColor(_i, 0x00, 0x00, 0x00);
+  
+}
+
+
+void lightUpStrip(){
+  if(state == 'c'){
+    countingStrip(timerCalibration, 0xFF, 0x00, 0x00);
+  } else if(state == 'w'){
+    strip.setPixelColor(0, 0x00, 0xFF, 0x00);
+  }else if(state == 'd'){
+    countingStrip(timerDown, 0x00, 0xFF, 0xFF);
+  }else if(state == 'a'){
+    countingStrip(timerAttempt, 0x00, 0x00, 0xFF);
+  }else if(state == 'e'){
+    float actualScore = score/sample;
+    float ledNum = (((STRIPCOUNT-1.0)*1.0)*(actualScore-1.0))/5.0;
+    for (int i=0; i<ledNum+1; i++){
+      strip.setPixelColor(i, 0x00, 0xFF, 0x00);
+    } 
+    for (int i=1; i<=actualScore; i++){
+      strip.setPixelColor(i*6, 0x00, 0x00, 0xFF);
+    } 
+  } else if(state == 's'){
+    countingStrip(timerEnd, 0xFF, 0xFF, 0x00);
+  } 
+  strip.show();
+}
+
+
+// ================================================================
+// ===               INTERRUPT DETECTION ROUTINE                ===
+// ================================================================
+
+volatile bool mpuInterrupt = false;     // indicates whether MPU interrupt pin has gone high
+void dmpDataReady() {
+    mpuInterrupt = true;
+}
+
+
+
+// ================================================================
+// ===                      INITIAL SETUP                       ===
+// ================================================================
+
+void setup() {
+    // join I2C bus (I2Cdev library doesn't do this automatically)
+    #if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
+        Wire.begin();
+        TWBR = 12; // 400kHz I2C clock (200kHz if CPU is 8MHz)
+    #elif I2CDEV_IMPLEMENTATION == I2CDEV_BUILTIN_FASTWIRE
+        Fastwire::setup(800, true);
+    #endif
+    // initialize serial communication
+    // (115200 chosen because it is required for Teapot Demo output, but it's
+    // really up to you depending on your project)
+    Serial.begin(115200);
+    #if USE_SERIAL_BT_COMM
+      mySerial.begin(115200);
+    #endif
+//    while (! Serial); // wait for Leonardo enumeration, others continue immediately
+//    while (! //mySerial);
+
+    //Initializing Software seria //mySerial for bluetooth comunication
+    
+    #if USE_NRF24L01_COMM
+      radio.begin();
+      radio.setChannel(2);
+      radio.setRetries(2,15);
+      radio.setPALevel(RF24_PA_HIGH);
+      radio.setDataRate(RF24_1MBPS);
+      radio.setAutoAck (0);
+      radio.setPayloadSize(MAX_MSG_LEN);
+      radio.openWritingPipe(pipe);
+      radio.printDetails();
+    #endif
+
+    Serial.println(F("Initializing I2C devices..."));
+    
+    #if USE_SERIAL_BT_COMM
+      mySerial.println(F("Initializing I2C devices..."));
+    #endif
+    
+    #if USE_NRF24L01_COMM
+      strcpy(tmpMsg,"Initializing I2C devices...");
+      radio.write(&tmpMsg,strlen(tmpMsg));
+    #endif
+    
+    // initialize device
+    mpu.initialize();
+
+    // verify connection
+    //mySerial.println(F("Testing device connections..."));
+    //mySerial.println(mpu.testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));
+
+    // load and configure the DMP
+    //mySerial.println(F("Initializing DMP..."));
+    //Serial.println(F("Initializing DMP..."));
+    devStatus = mpu.dmpInitialize();
+
+    // supply your own gyro offsets here, scaled for min sensitivity
+    mpu.setXAccelOffset(MPU6050_OFFSETS[0]);
+    mpu.setYAccelOffset(MPU6050_OFFSETS[1]);
+    mpu.setZAccelOffset(MPU6050_OFFSETS[2]);
+    mpu.setXGyroOffset(MPU6050_OFFSETS[3]);
+    mpu.setYGyroOffset(MPU6050_OFFSETS[4]);
+    mpu.setZGyroOffset(MPU6050_OFFSETS[5]);
+
+    
+
+    // make sure it worked (returns 0 if so)
+    if (devStatus == 0) {
+        // turn on the DMP, now that it's ready
+        //mySerial.println(F("Enabling DMP..."));
+        mpu.setDMPEnabled(true);
+
+        // enable Arduino interrupt detection
+        //mySerial.println(F("Enabling interrupt detection (Arduino external interrupt 0)..."));
+        //Serial.println(F("Enabling interrupt detection (Arduino external interrupt 0)..."));
+        attachInterrupt(0, dmpDataReady, RISING);
+        mpuIntStatus = mpu.getIntStatus();
+
+        // set our DMP Ready flag so the main loop() function knows it's okay to use it
+        //mySerial.println(F("DMP ready! Waiting for first interrupt..."));
+        //Serial.println(F("DMP ready! Waiting for first interrupt..."));
+        #if USE_NRF24L01_COMM
+          strcpy(tmpMsg,"DMP ready! Waiting for first inrrupt...");
+          radio.write(&tmpMsg,strlen(tmpMsg));
+        #endif
+        dmpReady = true;
+
+        // get expected DMP packet size for later comparison
+        packetSize = mpu.dmpGetFIFOPacketSize();
+    } else {
+        // ERROR!
+        // 1 = initial memory load failed
+        // 2 = DMP configuration updates failed
+        // (if it's going to break, usually the code will be 1)
+        //Serial.print(F("DMP Initialization failed (code "));
+        //Serial.print(devStatus);
+        //Serial.println(F(")"));
+        //mySerial.print(F("DMP Initialization failed (code "));
+        //mySerial.print(devStatus);
+        //mySerial.println(F(")"));
+    }
+    
+    // configure LED for output
+    startTimer = millis();
+    timerCalibration = 36;
+    timerDown = 4;
+    timerAttempt = 18;
+    secondsToGo = timerCalibration/1;
+    timerAfterFirstCalibration = 6;
+    timerEnd = 6;
+    score = 0.0;
+    best = 0.0;
+    last = 0.0;
+    state = 'c';
+    mx = 0.0;
+    my = 0.0;
+    mxnew = 0.0;
+    mynew = 0.0;
+    numberOfCircles = 6;
+    radiusOfCentralCircle = 50; 
+    inputString.reserve(200); 
+    strip.begin();
+
+}
+
+
+// ======================================================================
+// ===           MAIN PROGRAM LOOP -- MATTEO PIERGIOVANNI             ===
+// ======================================================================
+
+void loop() {
+    
+    //if (!dmpReady) return; //don't do anything if the MPU6050 does not work
+    
+    while (!mpuInterrupt && fifoCount < packetSize) {
+      
+    }
+    if(state == 'c'){
+      
+      secondsToGo = (timerCalibration/.0)-((millis()/1000 - startTimer));
+      if(secondsToGo<5.0){
+          //todo iniziare a salvare i dati per la calibrazione
+          calX += mx;
+          calY += my;
+          calSample += 1.0;
+      }
+      if(secondsToGo<0.0){
+          
+          state = 'w';
+          timerCalibration = timerAfterFirstCalibration;
+          startTimer = millis();
+      }
+    } else if(state == 'w'){
+      startTimer = millis();
+      if(sqrt((mx*mx)+(my*my))<=(numberOfCircles * radiusOfCentralCircle)){
+       if((numberOfCircles-(int)sqrt((mx*mx)+(my*my))/radiusOfCentralCircle)<=3){
+         state = 'd';
+       }
+     }
+      //todo if someone goes up to the board then start the countdown
+    }else if(state == 'd'){
+      secondsToGo = (timerDown)-((millis()/1000 - startTimer));
+      if(secondsToGo<0){
+        state = 'a';
+        score+=numberOfCircles-(int)sqrt((mx*mx)+(my*my))/radiusOfCentralCircle;
+        sample+=1.0;
+        startTimer = millis();
+      }
+    }else if(state == 'a'){
+      secondsToGo = (timerAttempt)-((millis()/1000 - startTimer));
+      sample+=1.0;
+      float tmpF = sqrt((mx*mx)+(my*my));
+      if(tmpF<=(numberOfCircles * radiusOfCentralCircle)){
+        score+=numberOfCircles-(int)tmpF/radiusOfCentralCircle;
+      }
+      if(secondsToGo<0){
+        state = 'e';
+        if(score>best){
+          best = score/sample;  
+        }
+        last = score/sample;
+        startTimer = millis();
+      }
+    }else if(state == 'e'){
+      secondsToGo = (timerEnd)-((millis()/1000 - startTimer));
+      
+      if(secondsToGo<0){
+        calX = 0.0;
+        calY = 0.0;
+        calSample = 1.0;
+        score = 0.0;
+        sample = 0.0;
+        state = 's';
+        timerCalibration = timerAfterFirstCalibration;
+        startTimer = millis();
+      }
+    } else if(state == 's'){
+//      while (mySerial.available()) {
+//            // get the new byte:
+//            char inChar = (char) mySerial.read();
+//            // add it to the inputString:
+//            inputString += inChar;
+//            // if the incoming character is a newline, set a flag
+//            // so the main loop can do something about it:
+            state ='c';
+    
+       startTimer = millis();
+    }
+        
+    
+    mpuInterrupt = false; //reset the interrupt flag
+    mpuIntStatus = mpu.getIntStatus(); //reset the INT_STATUS byte
+  
+    fifoCount = mpu.getFIFOCount(); // get current FIFO count
+
+    if ((mpuIntStatus & 0x10) || fifoCount == 1024) {  // check for overflow that should not appen (if it does it means my code it's to slow)
+        Serial.println("#######################################");
+
+        #if USE_SERIAL_BT_COMM
+          mySerial.println("#######################################");
+        #endif
+        mpu.resetFIFO(); //reset
+    } else if (mpuIntStatus & 0x02) { //if my code is fast enought i check here for the interrupt 
+  //    while (fifoCount < packetSize) //wait for correct data lenght (short wait)
+      fifoCount = mpu.getFIFOCount();
+      while (fifoCount >= packetSize)
+      {
+        mpu.getFIFOBytes(fifoBuffer, packetSize); // read a packet from FIFO
+        fifoCount -= packetSize; // update FIFO count, this let us immediatly read more without waiting for an interrupt.
+      }
+      {
+        #ifdef OUTPUT_READABLE_YAWPITCHROLL
+            mpu.dmpGetQuaternion(&quater, fifoBuffer);
+            mpu.dmpGetGravity(&gravity, &quater);
+            mpu.dmpGetYawPitchRoll(ypr, &quater, &gravity);
+            mxnew = ypr[2] * 180/M_PI;
+            mynew = ypr[1] * 180/M_PI;
+            mynew = mynew*-1.0;
+            mxnew = mxnew * 13.50;
+            mynew = mynew * 13.50;
+            if((state =='c')){
+//              Serial.print("0 --(" + String(calX) + ")("+ String(calY)+ ")("+ String(mxnew)+ ")("+ String(mynew)) ;
+              mx = mxnew - (calX/calSample);
+              my = mynew - (calY/calSample); 
+            }else if(abs(mxnew-mx)<100 && abs(mynew-my)<100){
+//             Serial.print("1 --(" + String(calX) + ")("+ String(calY)+ ")("+ String(mxnew)+ ")("+ String(mynew)) ;
+              mx = mxnew- (calX/calSample);
+              my = mynew- (calY/calSample);
+            }else{
+//             Serial.print("2 --(" + String(calX) + ")("+ String(calY)+ ")("+ String(mxnew)+ ")("+ String(mynew)) ;
+              mx = mxnew- (calX/calSample);
+              my = mynew- (calY/calSample);
+//              mx = (mx*0.9)+(mxnew*0.1)- (calX/calSample);
+//              my = (my*0.9)+(mynew*0.1)- (calY/calSample);  
+            }
+        #endif
+        //mySerial.flush();
+        if((state == 'c')&&((++sendSerial)/sendSerialCount)){
+          sendSerial = 0;
+          Serial.println(String(String(secondsToGo)+",0.0,c"));
+          #if USE_SERIAL_BT_COMM
+            mySerial.println(String(String(secondsToGo)+",0.0,c"));
+          #endif
+          #if USE_NRF24L01_COMM
+            String(String(secondsToGo)+",0.0,c").toCharArray(tmpMsg,MAX_MSG_LEN);
+            radio.write(&tmpMsg,strlen(tmpMsg));
+          #endif
+        } else if((state == 'w')&&((++sendSerial)/sendSerialCount)){
+          sendSerial = 0;
+          Serial.println(String("0.0,0.0,w"));
+          #if USE_SERIAL_BT_COMM
+            mySerial.println(String("0.0,0.0,w"));
+          #endif
+          
+          #if USE_NRF24L01_COMM
+            String("0.0,0.0,w").toCharArray(tmpMsg,MAX_MSG_LEN);
+            radio.write(&tmpMsg,strlen(tmpMsg));
+          #endif
+          
+        }else if((state == 'd')&&((++sendSerial)/sendSerialCount)){
+          sendSerial = 0;
+          Serial.println(String(String(secondsToGo)+",0.0,d"));
+          #if USE_SERIAL_BT_COMM
+            mySerial.println(String(String(secondsToGo)+",0.0,d"));
+          #endif
+
+          #if USE_NRF24L01_COMM
+            String(String(secondsToGo)+",0.0,d").toCharArray(tmpMsg,MAX_MSG_LEN);
+            radio.write(&tmpMsg,strlen(tmpMsg));
+          #endif
+        }else if((state == 'a')&&((++sendSerial)/sendSerialCount)){
+          sendSerial = 0;
+          Serial.println(String(String(int(mx))+","+String(int(my))+",a,"+String(int(secondsToGo))+","+String(score/sample)));
+          #if USE_SERIAL_BT_COMM
+            mySerial.println(String(String(int(mx))+","+String(int(my))+",a,"+String(int(secondsToGo))+","+String(score/sample)));
+          #endif
+          
+          //change score, score to mx,my
+          #if USE_NRF24L01_COMM
+            String(String(int(mx))+","+String(int(my))+",a,"+String(int(secondsToGo))+","+String(score/sample)).toCharArray(tmpMsg,MAX_MSG_LEN);
+            radio.write(&tmpMsg,strlen(tmpMsg));
+          #endif
+        }else if((state == 'e')&&((++sendSerial)/sendSerialCount)){
+          sendSerial = 0;
+          Serial.println(String(String(best)+","+String(last)+",e"));
+          #if USE_SERIAL_BT_COMM
+            mySerial.println(String(String(best)+","+String(last)+",e"));
+          #endif
+          #if USE_NRF24L01_COMM
+            String(String(best)+","+String(last)+",e").toCharArray(tmpMsg,MAX_MSG_LEN);
+            radio.write(&tmpMsg,strlen(tmpMsg));
+          #endif
+        } else if((state == 's')&&((++sendSerial)/sendSerialCount)){
+          sendSerial = 0;
+          Serial.println(String("0.0,0.0,s"));
+          #if USE_SERIAL_BT_COMM
+            mySerial.println(String("0.0,0.0,s"));
+          #endif
+          #if USE_NRF24L01_COMM
+            String("0.0,0.0,s").toCharArray(tmpMsg,MAX_MSG_LEN);
+            radio.write(&tmpMsg,strlen(tmpMsg));
+          #endif
+        }
+  //      fifoCount = mpu.getFIFOCount();
+      }
+    }
+    lightUpStrip();  
+//    Serial.println(String(state)+","+String(String(mx)+","+String(my)));
+      
+}
+
+
+
+
+
+
+
