@@ -116,7 +116,7 @@ void draw() {
     translate(width / 2, height / 2);
     textAlign(CENTER);
     fill(fontColor);
-    text(String.format("Secondi rimasti per la calibrazione: %d", secondsToGo), 0, 0);
+    text(String.format("Tempo rimasto per la calibrazione: %d", secondsToGo), 0, 0);
     popMatrix();
   } else if (currentState.equals("SENDDATA")) {
     showScore();
@@ -208,7 +208,7 @@ void draw() {
     fill(fontColor);
     textAlign(CENTER);
     translate(width / 2, height - 30);
-    text(String.format("Secondi rimasti: %d", secondsToGo), 0, 0);
+    text(String.format("Tempo rimasto: %d", secondsToGo), 0, 0);
     popMatrix();
     //the circle
     pushMatrix();
@@ -425,7 +425,7 @@ void showScore() {
       fill(fontColor);
       textAlign(LEFT);
       translate(20, 60);
-      text(String.format("Il miglior punteggio é: %.2f / %d", bestScore, numberOfCircles), 0, 0);
+      text(String.format("Miglior punteggio: %.2f / %d", bestScore, numberOfCircles), 0, 0);
       popMatrix();
     }
     if (lastScore > 0) {
@@ -433,7 +433,7 @@ void showScore() {
       fill(fontColor);
       textAlign(LEFT);
       translate(20, 90);
-      text(String.format("Hai ottenuto un punteggio di: %.2f / %d", lastScore, numberOfCircles), 0, 0);
+      text(String.format("Il tuo punteggio: %.2f / %d", lastScore, numberOfCircles), 0, 0);
       popMatrix();
     }   
 }
