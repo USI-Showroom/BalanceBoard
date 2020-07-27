@@ -4,6 +4,7 @@ import toxi.geom.*;
 import toxi.processing.*;
 import http.requests.*;
 
+//Change this if you cannot connect to the board
 int PORT_NUM = 2;
 
 //calibration
@@ -81,8 +82,8 @@ void setup() {
   lastScore = -1.0;
   bestScore = -1.0;
   multiplier = (numberOfCircles*radiusOfCentralCircle) / 0.20;
-  int w = numberOfCircles * radiusOfCentralCircle * 2 + 50;
-  int h = numberOfCircles * radiusOfCentralCircle * 2 + 200;
+  //int w = numberOfCircles * radiusOfCentralCircle * 2 + 50;
+  //int h = numberOfCircles * radiusOfCentralCircle * 2 + 200;
 
   size(650,800, OPENGL);
   background(backgoundColor);
@@ -90,7 +91,12 @@ void setup() {
   centery = height / 2;
   println(Serial.list()[PORT_NUM]);
   String portName = Serial.list()[PORT_NUM];
-  port = new Serial(this, portName, 115200);
+  try {
+    port = new Serial(this, portName, 115200);
+  } catch (RuntimeException re) {
+    println("Errore porta seriale. Prova a cambiare PORT_NUM");
+    exit();
+  }
   calSamples = 0;
   calDone = false;
   first = true;
