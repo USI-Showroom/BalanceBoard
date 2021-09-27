@@ -11,7 +11,4 @@ A Balance board is used as a sport device which is a lever device that helps us 
     3. calibration of the MPU 6050 sensor, and 
     4. The user manual of the Balance Board. 
 
- Markup : 1. code for the logic implementation of the board, 
-        2. code for  bluetooth setup,  
-        3. calibration of the MPU 6050 sensor, and 
-        4. The user manual of the Balance Board. 
+
