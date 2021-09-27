@@ -5,7 +5,7 @@ A Balance board is used as a sport device which is a lever device that helps us 
 
 ##
 
-The file BALANCEBOARD contains the following
+* The file BALANCEBOARD contains the following
     * code for the logic implementation of the board, 
     * code for  bluetooth setup,  
     * calibration of the MPU 6050 sensor, and 
