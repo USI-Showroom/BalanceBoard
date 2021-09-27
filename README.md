@@ -27,4 +27,4 @@ A Balance board is used as a sport device which is a lever device that helps us 
 4. Instructions on the timing setup of the balance board and the LED strip. 
 
 
-## For detailed information on the balance board, technical information and instructions on the setup take a look at the user manual file in the BALANCEBOARD folder. 
+## For detailed information on the balance board, technical details and instructions on the setup take a look at the user manual file in the BALANCEBOARD folder. 
