@@ -13,13 +13,8 @@ A Balance board is used as a sport device which is a lever device that helps us 
 
 #### The file BalanceBoard_GUI_en contains  
 
-1. The processing file for the english version of the graphical user interface  
-
-#### The file BalanceBoard_GUI_en contains  
-
-1. The processing file for the Italian version of the graphical user interface. 
-
+1. The processing file for the English version of the graphical user interface  
 
 #### The file BalanceBoard_GUI_it contains  
 
-1. The processing file for the graphical user interface. 
+1. The processing file for the Italian version of the graphical user interface. 
